@@ -288,6 +288,31 @@ def game_log(team: str, n: int = 5) -> list[dict]:
     return out
 
 
+def player_box_gamelog(name: str, team: str) -> pd.DataFrame:
+    """박스스코어(bs_lines)에서 특정 선수의 경기별 타격 — 우리/상대 모두(현재 시즌).
+    타석결과·도루까지 풍부. 라커룸 게임별이 타팀 비공개인 문제를 우회."""
+    bat = db.load_game_lines("batting", team=team)
+    if bat.empty:
+        return pd.DataFrame()
+    p = bat[bat["선수명"] == name].copy()
+    if p.empty:
+        return pd.DataFrame()
+    g = games_df()
+    omap, dmap = {}, {}
+    for _, r in g.iterrows():
+        opp = r["team2"] if r["team1"] == team else r["team1"]
+        omap[r["game_idx"]] = opp
+        dmap[r["game_idx"]] = r.get("date")
+    p["상대"] = p["game_idx"].map(omap)
+    p["date"] = p["game_idx"].map(dmap)
+    p["_k"] = p["date"].map(_date_key)
+    p = p.sort_values("_k")
+    if "타석결과" in p.columns:
+        p["타석결과"] = p["타석결과"].map(lambda x: " ".join(x) if isinstance(x, list) else x)
+    cols = [c for c in ["date", "상대", "타수", "안타", "타점", "득점", "도루", "타석결과"] if c in p.columns]
+    return p[cols].reset_index(drop=True)
+
+
 def _records_vs(team: str, g: pd.DataFrame) -> dict:
     """team이 상대한 각 팀별 [승,패,득,실]."""
     rec: dict[str, list[int]] = {}

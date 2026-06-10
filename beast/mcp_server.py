@@ -67,6 +67,17 @@ def refresh_data(season: int | None = None) -> str:
 
 
 @mcp.tool()
+def guide() -> str:
+    """이 리그/게임원 데이터의 배경·해석상 함정·도구 사용법을 담은 도메인 가이드.
+    분석을 시작하기 전, 또는 데이터 해석이 헷갈릴 때 먼저 읽어라(소표본·ERA 7이닝·
+    상대 등번호 0·player_career는 전체리그 합산 등)."""
+    def run():
+        path = config.PROJECT_ROOT / "docs" / "GAMEONE.md"
+        return path.read_text(encoding="utf-8") if path.exists() else "가이드 문서를 찾을 수 없습니다."
+    return _safe(run)
+
+
+@mcp.tool()
 def data_status() -> str:
     """현재 저장된 데이터 신선도 — 최근 수집 시각, 스냅샷 수, 박스스코어 경기 수."""
     def run():
@@ -278,35 +289,59 @@ def opponent_roster(team: str) -> str:
     return _safe(run)
 
 
+def _resolve_club(team: str):
+    """team(빈값=우리팀) → club_idx. 못 찾으면 None."""
+    if not team or team == stats.OUR_TEAM:
+        return config.CLUB_IDX
+    return stats.club_idx_for(team)
+
+
 @mcp.tool()
-def player_gamelog(name: str, season: int = 0) -> str:
-    """선수의 **경기별 raw 기록 (사이언스리그 한정)** — 날짜/상대/구분 + 타석/타수/안타/득점/타점.
-    우리 리그 게임 단위 데이터(시즌 내 추세·컨디션·상대별 성적). season 미지정(0)=현재 시즌.
-    name=우리 팀 선수명. (라이브 수집)"""
+def player_gamelog(name: str, team: str = "", season: int = 0) -> str:
+    """선수의 **경기별 raw 기록 (사이언스리그)**. 우리/상대 선수 모두 가능.
+    현재 시즌은 박스스코어 기반(타석결과·도루까지, 상대 선수 포함), 과거 시즌은 라커룸 기반
+    (우리 팀 선수만 — 타팀 과거 게임별은 게임원이 비공개). team 미지정=우리팀, 상대면 그 팀명.
+    season 미지정(0)=현재 시즌."""
     def run():
-        from beast.crawler.crawl import crawl_player_gamelog
+        _ensure_data()
         yr = season or config.CURRENT_SEASON
-        r = crawl_player_gamelog(_get_session(), name, season=yr)
+        t = team or stats.OUR_TEAM
+        # 1) 현재 시즌 → 박스스코어 (우리/상대 모두, 풍부)
+        if yr == config.CURRENT_SEASON:
+            df = stats.player_box_gamelog(name, t)
+            if not df.empty:
+                return f"## {name} ({t}) {yr} 사이언스리그 경기별 (박스스코어)\n" + _md(df)
+        # 2) 과거 시즌(또는 박스 없음) → 라커룸 (우리 팀 선수만)
+        from beast.crawler.crawl import crawl_player_gamelog
+        cidx = _resolve_club(team)
+        if cidx is None:
+            return f"'{team}' 팀을 찾지 못함. list_teams로 확인."
+        r = crawl_player_gamelog(_get_session(), name, season=yr, club_idx=cidx)
         if r.get("error"):
-            return f"{r['error']}. 우리 팀: {', '.join(r.get('available', []))[:300]}"
+            return f"{r['error']}. 해당 팀 선수: {', '.join(r.get('available', []))[:300]}"
         games = r["games"]
         if not games:
-            return f"'{name}' {yr}시즌 사이언스리그 경기 기록이 없습니다."
+            note = " (타팀 과거 게임별은 비공개)" if team and team != stats.OUR_TEAM else ""
+            return f"'{name}' {yr}시즌 사이언스리그 경기 기록이 없습니다{note}."
         df = pd.DataFrame(games)[["date", "상대", "구분", "타석", "타수", "안타", "득점", "타점"]]
-        return f"## {name} {yr} 사이언스리그 경기별 (raw)\n" + _md(df)
+        return f"## {name} ({t}) {yr} 사이언스리그 경기별 (라커룸)\n" + _md(df)
     return _safe(run)
 
 
 @mcp.tool()
-def player_career(name: str, official: bool = True) -> str:
+def player_career(name: str, team: str = "", official: bool = True) -> str:
     """선수의 시즌별 + 통산 기록(라커룸). ⚠️ **이 선수가 뛴 모든 리그·팀 합산 전체 커리어**
     (사이언스리그 한정 아님 — 게임원이 리그 분리를 안 해줌). 선수의 전반적 수준·다년 추세 파악용.
-    우리 리그(사이언스리그) 단위 경기 기록은 player_gamelog를 쓸 것. name=우리 팀 선수명."""
+    우리/상대 선수 모두 가능 — team 미지정=우리팀, 상대 선수면 그 팀명.
+    사이언스리그 단위 경기 기록은 player_gamelog를 쓸 것."""
     def run():
         from beast.crawler.crawl import crawl_player_career
-        career = crawl_player_career(_get_session(), name, official=official)
+        cidx = _resolve_club(team)
+        if cidx is None:
+            return f"'{team}' 팀을 찾지 못함. list_teams로 확인."
+        career = crawl_player_career(_get_session(), name, club_idx=cidx, official=official)
         if career.get("error"):
-            return f"{career['error']}. 우리 팀 선수: {', '.join(career.get('available', []))[:300]}"
+            return f"{career['error']}. 해당 팀 선수: {', '.join(career.get('available', []))[:300]}"
         bdf, pdf = stats.career_tables(career)
         if bdf.empty and pdf.empty:
             return f"'{name}' 통산 기록이 없습니다(공식경기 기준)."
@@ -349,7 +384,18 @@ def list_lineups(limit: int = 10) -> str:
 
 
 def main() -> None:
-    mcp.run()
+    """기본 stdio(Claude Desktop). --http [--port N] 면 Streamable HTTP(원격/claude.ai용)."""
+    import sys
+    if "--http" in sys.argv:
+        if "--port" in sys.argv:
+            try:
+                mcp.settings.port = int(sys.argv[sys.argv.index("--port") + 1])
+            except (ValueError, IndexError):
+                pass
+        mcp.settings.host = "127.0.0.1"
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
 
 
 if __name__ == "__main__":
