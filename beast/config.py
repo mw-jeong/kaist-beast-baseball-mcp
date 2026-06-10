@@ -59,11 +59,7 @@ CURRENT_SEASON = int(os.getenv("CURRENT_SEASON", "2026"))
 # ── 인증 ──────────────────────────────────────────────────────────────
 GAMEONE_USER_ID = os.getenv("GAMEONE_USER_ID", "")
 GAMEONE_PASSWD = os.getenv("GAMEONE_PASSWD", "")
-
-# ── Claude API ───────────────────────────────────────────────────────
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-# 전략/라인업 추론 모델 — 속도·비용 균형 (adaptive thinking + effort 지원)
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+# 분석은 Claude(Desktop/웹)가 직접 하므로 별도 LLM API 키는 필요 없다.
 
 # ── HTTP ─────────────────────────────────────────────────────────────
 USER_AGENT = (

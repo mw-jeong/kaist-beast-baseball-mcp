@@ -21,10 +21,14 @@ gameone (login) --crawl--> parse --> SQLite
 This program collects/organizes data; **Claude (Desktop or web) performs the reasoning** (lineups, strategy).
 
 ## Requirements
-1. **macOS or Windows** + Claude (Claude Desktop app, or claude.ai web on Pro/Max/Team/Enterprise)
-2. **Python 3.10+** (the install step below can install 3.12 via `uv`)
-3. **Your own gameone account** that is a registered league member of the Science League
+1. **macOS or Windows** with a terminal and **git** installed
+   (macOS: git is offered by Xcode Command Line Tools on first use; Windows: install "Git for Windows").
+2. **Claude** — the Claude Desktop app (recommended), or claude.ai web (Pro/Max/Team/Enterprise).
+3. **Python 3.10+** — you do *not* need to install it yourself; the `uv` step below fetches 3.12.
+4. **Your own gameone account** that is a registered league member of the Science League
    (records are invisible to non-members; each person uses their own account).
+
+You do **not** need any LLM/Anthropic API key — Claude itself does the analysis.
 
 ## Install
 
@@ -35,8 +39,12 @@ cd kaist-beast-baseball-mcp
 ```
 
 ### 2) Virtual env + dependencies (uv recommended)
-Install uv if needed: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
+Install uv if you don't have it: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
 Windows (PowerShell) `irm https://astral.sh/uv/install.ps1 | iex`
+
+> After installing uv, **open a new terminal** (or run the PATH line the installer prints) so the
+> `uv` command is found. `uv venv --python 3.12` will **download Python 3.12 automatically** if needed.
+> You don't activate the venv — the commands below call `.venv/...` directly.
 
 macOS / Linux:
 ```bash
@@ -69,6 +77,8 @@ GAMEONE_PASSWD=your_password
 ```bash
 .venv/bin/python -m beast.cli login-test          # Windows: .venv\Scripts\python -m beast.cli login-test
 ```
+You should see "✓ 로그인 성공". **If it fails, fix `.env` (id/password) before continuing** — the
+connect step won't work until login succeeds. Run all commands from the project folder.
 
 ## Connect to Claude
 
@@ -77,16 +87,27 @@ GAMEONE_PASSWD=your_password
 .venv/bin/python -m beast.cli setup-desktop       # Windows: .venv\Scripts\python -m beast.cli setup-desktop
 ```
 This auto-registers the server in your Claude Desktop config (handles macOS and Windows paths).
-Then **fully quit and reopen Claude Desktop**.
+Then **fully quit and reopen Claude Desktop** — on macOS closing the window isn't enough; use Cmd+Q
+(or right-click the dock icon > Quit). On Windows, quit from the system tray.
 
-### Option B — claude.ai web (remote, advanced)
-claude.ai only accepts **remote HTTP** MCP servers reachable from the public internet — a local
-stdio server cannot be added directly. So you must run this server in HTTP mode and expose it:
+Verify it loaded: in Claude Desktop, **Settings > Developer** should list `kaist-beast-mcp` as running,
+and the chat's tools/connector menu should show its tools. (If not, see Troubleshooting.)
 
-1. Run in HTTP mode: `.venv/bin/python -m beast.mcp_server --http --port 8765`
+> If you later **move or rename the project folder**, the saved paths break — just re-run
+> `setup-desktop` and restart Claude Desktop.
+
+### Option B — claude.ai web (remote, advanced / optional)
+Most people should use Option A. Use this only if you specifically want the web app. claude.ai only
+accepts **remote HTTP** MCP servers reachable from the public internet — a local stdio server cannot be
+added directly. You must keep this server running in HTTP mode on your machine and expose it via a tunnel:
+
+1. Run in HTTP mode (leave it running): `.venv/bin/python -m beast.mcp_server --http --port 8765`
    (serves `http://127.0.0.1:8765/mcp`)
-2. Expose it with a tunnel, e.g. `cloudflared tunnel --url http://127.0.0.1:8765`
-   or `ngrok http 8765` -> you get a public `https://...` URL.
+2. Install a tunnel tool and expose the port (in another terminal):
+   - cloudflared — macOS `brew install cloudflared`, Windows `winget install Cloudflare.cloudflared`,
+     then `cloudflared tunnel --url http://127.0.0.1:8765`
+   - or ngrok (sign up, install) — `ngrok http 8765`
+   You get a public `https://...` URL; the MCP endpoint is that URL + `/mcp`.
 3. In claude.ai: **Customize > Connectors > Add custom connector**, paste `https://.../mcp`.
    (Pro/Max; Team/Enterprise admins add it under Organization settings > Connectors.)
 
@@ -109,6 +130,9 @@ Ask Claude in natural language, for example:
 
 Claude calls the tools below automatically. Tip: it can call `guide` first to learn the
 domain caveats (small samples, 7-inning ERA, etc.).
+
+> The **first question takes ~1 minute** — it triggers the initial data collection (records + box
+> scores) and caches it. Later questions are instant; ask "refresh the data" after new games.
 
 ### MCP tools (22)
 | Group | Tools | Notes |

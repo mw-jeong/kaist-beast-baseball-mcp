@@ -21,10 +21,14 @@
 이 프로그램은 데이터를 모으고, **분석(라인업·전략)은 Claude(데스크톱/웹)가** 직접 합니다.
 
 ## 사전 요구사항
-1. **macOS 또는 Windows** + Claude (Claude Desktop 앱, 또는 Pro/Max/Team/Enterprise의 claude.ai 웹)
-2. **Python 3.10 이상** (아래 설치에서 `uv`로 3.12 자동 설치 가능)
-3. **본인 게임원 계정** — 사이언스리그에 리그 회원으로 가입되어 있어야 함
-   (비회원에겐 기록이 안 보입니다. 각자 자기 계정을 씁니다.)
+1. **macOS 또는 Windows** — 터미널과 **git** 설치
+   (macOS는 git 첫 사용 시 Xcode Command Line Tools 설치 안내가 뜸 / Windows는 "Git for Windows" 설치)
+2. **Claude** — Claude Desktop 앱(권장), 또는 claude.ai 웹(Pro/Max/Team/Enterprise)
+3. **Python 3.10 이상** — 직접 설치할 필요 없음. 아래 `uv` 단계가 3.12를 자동으로 받아옵니다.
+4. **본인 게임원 계정** — 사이언스리그에 리그 회원으로 가입되어 있어야 함
+   (비회원에겐 기록이 안 보입니다. 각자 자기 계정.)
+
+LLM/Anthropic **API 키는 필요 없습니다** — 분석은 Claude가 직접 합니다.
 
 ## 설치
 
@@ -35,8 +39,12 @@ cd kaist-beast-baseball-mcp
 ```
 
 ### 2) 가상환경 + 의존성 (uv 권장)
-uv 설치: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
+uv 없으면 설치: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
 Windows(PowerShell) `irm https://astral.sh/uv/install.ps1 | iex`
+
+> uv 설치 후 **새 터미널을 열어야**(또는 설치 시 출력되는 PATH 줄 실행) `uv` 명령이 인식됩니다.
+> `uv venv --python 3.12` 는 필요하면 **Python 3.12를 자동으로 받아옵니다.** venv를 활성화할 필요 없이
+> 아래 명령들이 `.venv/...` 를 직접 호출합니다.
 
 macOS / Linux:
 ```bash
@@ -69,6 +77,8 @@ GAMEONE_PASSWD=본인_비밀번호
 ```bash
 .venv/bin/python -m beast.cli login-test          # Windows: .venv\Scripts\python -m beast.cli login-test
 ```
+"✓ 로그인 성공"이 떠야 합니다. **실패하면 `.env`(아이디/비번)부터 고치고 진행하세요** — 로그인이
+되기 전엔 연동 단계가 동작하지 않습니다. 모든 명령은 프로젝트 폴더 안에서 실행합니다.
 
 ## Claude 연동
 
@@ -77,16 +87,27 @@ GAMEONE_PASSWD=본인_비밀번호
 .venv/bin/python -m beast.cli setup-desktop       # Windows: .venv\Scripts\python -m beast.cli setup-desktop
 ```
 이 명령이 본인 PC 경로에 맞게 Claude Desktop 설정에 서버를 자동 등록합니다(macOS/Windows 경로 자동).
-그 다음 **Claude Desktop을 완전히 종료 후 다시 실행**하세요.
+그 다음 **Claude Desktop을 완전히 종료 후 다시 실행**하세요 — macOS는 창만 닫으면 안 되고 Cmd+Q
+(또는 독 아이콘 우클릭 > 종료), Windows는 트레이에서 종료.
 
-### 방법 B — claude.ai 웹 (원격, 고급)
-claude.ai는 **공인 인터넷에서 접근 가능한 원격 HTTP** MCP 서버만 받습니다 — 로컬 stdio 서버는
-직접 추가할 수 없습니다. 따라서 이 서버를 HTTP 모드로 실행하고 외부에 노출해야 합니다:
+연결 확인: Claude Desktop의 **Settings > Developer**에 `kaist-beast-mcp`가 실행 중으로 보이고,
+채팅의 도구/커넥터 메뉴에 도구들이 뜨면 성공. (안 되면 트러블슈팅 참고)
 
-1. HTTP 모드 실행: `.venv/bin/python -m beast.mcp_server --http --port 8765`
+> 나중에 **프로젝트 폴더를 옮기거나 이름을 바꾸면** 저장된 경로가 깨집니다 — `setup-desktop`을
+> 다시 실행하고 Claude Desktop을 재시작하세요.
+
+### 방법 B — claude.ai 웹 (원격, 고급/선택)
+대부분은 방법 A를 쓰면 됩니다. 웹 앱을 꼭 써야 할 때만 사용하세요. claude.ai는 **공인 인터넷에서
+접근 가능한 원격 HTTP** MCP 서버만 받습니다 — 로컬 stdio 서버는 직접 추가할 수 없습니다. 따라서 이
+서버를 HTTP 모드로 본인 PC에서 계속 실행하고 터널로 노출해야 합니다:
+
+1. HTTP 모드 실행(계속 켜둠): `.venv/bin/python -m beast.mcp_server --http --port 8765`
    (`http://127.0.0.1:8765/mcp` 제공)
-2. 터널로 노출: 예) `cloudflared tunnel --url http://127.0.0.1:8765` 또는 `ngrok http 8765`
-   -> 공개 `https://...` URL을 얻습니다.
+2. 터널 도구 설치 후 포트 노출(다른 터미널에서):
+   - cloudflared — macOS `brew install cloudflared`, Windows `winget install Cloudflare.cloudflared`,
+     이후 `cloudflared tunnel --url http://127.0.0.1:8765`
+   - 또는 ngrok(가입·설치) — `ngrok http 8765`
+   공개 `https://...` URL이 나오며, MCP 엔드포인트는 그 URL + `/mcp` 입니다.
 3. claude.ai에서 **Customize > Connectors > Add custom connector**, `https://.../mcp` 입력.
    (Pro/Max; Team/Enterprise는 관리자가 Organization settings > Connectors에서 추가)
 
@@ -109,6 +130,9 @@ Claude에 자연어로 물어보세요:
 
 Claude가 아래 도구를 알아서 호출합니다. 팁: `guide`를 먼저 호출하면 해석상 함정
 (소표본, ERA 7이닝 등)을 먼저 익힐 수 있습니다.
+
+> **첫 질문은 ~1분 걸립니다** — 최초 데이터 수집(기록 + 박스스코어) 후 캐시합니다. 이후 질문은
+> 즉시 응답되고, 경기 후엔 "데이터 새로고침"이라고 하면 갱신됩니다.
 
 ### MCP 도구 (22개)
 | 분류 | 도구 | 설명 |
