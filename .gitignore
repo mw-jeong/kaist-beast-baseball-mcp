@@ -1,0 +1,20 @@
+# secrets — 절대 커밋 금지
+.env
+*.bak
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# data (raw HTML 덤프 · DB · 생성 리포트) — 디렉토리는 .gitkeep으로 유지
+data/raw/*.html
+data/*.db
+data/report_*.md
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

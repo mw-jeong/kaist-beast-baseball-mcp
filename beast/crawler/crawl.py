@@ -1,0 +1,106 @@
+"""수집 오케스트레이터 — 로그인 → 조 설정 → fetch → parse → 구조화 dict.
+
+snapshot()이 원시 HTML을 저장하는 디버그용이라면, crawl()은 파싱까지 끝낸
+구조화 데이터를 돌려준다(저장/분석용).
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from .. import config
+from . import endpoints as E
+from . import parse
+from .session import GameOneSession
+
+
+def crawl(session: GameOneSession, *, season: int | None = None,
+          jo: str | None = None) -> dict[str, Any]:
+    """우리 조(기본 B) 기준 전체 데이터 수집 + 파싱."""
+    jo = jo or config.OUR_JO
+    season = season or config.CURRENT_SEASON
+    session.ensure_login()
+    session.set_bujo(config.BUJO_IDX[jo])  # 조 설정 (핵심)
+
+    def g(url: str, ref: str) -> str:
+        return session.get_html(url, referer=ref)
+
+    data: dict[str, Any] = {"season": season, "jo": jo}
+
+    data["batters"] = parse.parse_batters(
+        g(E.record_content("batter", season=season, group_code=config.OUR_GROUP_CODE),
+          E.record_parent("batter")), jo)
+    data["pitchers"] = parse.parse_pitchers(
+        g(E.record_content("pitcher", season=season, group_code=config.OUR_GROUP_CODE),
+          E.record_parent("pitcher")), jo)
+    data["team_rank"] = parse.parse_team_rank(
+        g(E.record_content("rank", season=season, group_code=config.OUR_GROUP_CODE),
+          E.record_parent("rank")), jo)
+    data["team_offense"] = parse.parse_team_offense(
+        g(E.record_content("offense", season=season, group_code=config.OUR_GROUP_CODE),
+          E.record_parent("offense")), jo)
+    data["team_defense"] = parse.parse_team_defense(
+        g(E.record_content("defense", season=season, group_code=config.OUR_GROUP_CODE),
+          E.record_parent("defense")), jo)
+    data["games"] = parse.parse_schedule(
+        g(E.schedule_content("result", season=season), E.schedule_parent("result")))
+    data["roster"] = parse.parse_roster(
+        g(E.state_content("regist", group_code=config.OUR_GROUP_CODE, club_idx=config.CLUB_IDX),
+          E.state_parent("regist")))
+    return data
+
+
+def crawl_roster(session: GameOneSession, club_idx: int, *,
+                 group_code: int | None = None) -> list[dict]:
+    """특정 팀(club_idx)의 등록 명단만 수집."""
+    session.ensure_login()
+    gc = group_code or config.OUR_GROUP_CODE
+    html = session.get_html(
+        E.state_content("regist", group_code=gc, club_idx=club_idx),
+        referer=E.state_parent("regist"))
+    return parse.parse_roster(html)
+
+
+def collect_games(session: GameOneSession, *, season: int | None = None,
+                  jo: str | None = None, max_pages: int = 15) -> list[dict]:
+    """전체 일정(schedule/all)에서 우리 조의 '완료된' 경기 목록 — 전 페이지 순회.
+
+    schedule/all은 페이지당 ~20경기라 page를 끝까지(새 경기 없을 때까지) 돈다.
+    """
+    jo = jo or config.OUR_JO
+    season = season or config.CURRENT_SEASON
+    session.ensure_login()
+    session.set_bujo(config.BUJO_IDX[jo])
+    seen: dict[int, dict] = {}
+    for page in range(1, max_pages + 1):
+        html = session.get_html(
+            E.schedule_content("all", season=season, page=page),
+            referer=E.schedule_parent("all"))
+        games = [g for g in parse.parse_schedule(html)
+                 if g.get("played") and g.get("game_idx")]
+        new = [g for g in games if g["game_idx"] not in seen]
+        if not new:           # 새 경기 없음 → 마지막 페이지
+            break
+        for g in new:
+            seen[g["game_idx"]] = g
+    return list(seen.values())
+
+
+def crawl_boxscores(session: GameOneSession, *, season: int | None = None,
+                    jo: str | None = None, skip_existing: bool = True,
+                    limit: int | None = None) -> dict:
+    """우리 조 완료 경기들의 박스스코어를 증분 수집·저장. {fetched, skipped, total} 반환."""
+    from ..storage import db
+    games = collect_games(session, season=season, jo=jo)
+    have = db.stored_game_idxs() if skip_existing else set()
+    todo = [g for g in games if g["game_idx"] not in have]
+    if limit:
+        todo = todo[:limit]
+    fetched = 0
+    for g in todo:
+        gid = g["game_idx"]
+        html = session.get_html(
+            E.boxscore_content(gid), referer=E.schedule_parent("result"))
+        bs = parse.parse_boxscore(html, game_idx=gid)
+        db.save_boxscore(bs, date=g.get("일시"), jo=g.get("분류"))
+        fetched += 1
+    return {"fetched": fetched, "skipped": len(games) - len(todo), "total": len(games)}
