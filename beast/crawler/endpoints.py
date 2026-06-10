@@ -65,6 +65,21 @@ def orderpaper(*, lig_idx=None) -> str:
     return _u("/league/pop/orderpaper", lig_idx=lig_idx or config.LIG_IDX)
 
 
+def locker_career(token: str, *, season=None, game_type=None) -> str:
+    """선수 라커룸 통합기록(통산/시즌, **모든 리그 합산**). token=locker group_code,
+    game_type 2=공식 4=원외. season 미지정 시 현재 시즌."""
+    return _u("/locker/record/sum", group_code=token, season=season, game_type=game_type)
+
+
+def locker_games(token: str, *, season=None, game_type=2, lig_idx=None) -> str:
+    """선수 라커룸 게임별기록. lig_idx로 리그 스코프(85=사이언스리그). 경기별 raw 행."""
+    return _u("/locker/record/game", group_code=token,
+              season=season, game_type=game_type, lig_idx=lig_idx)
+
+
+LOCKER_BASE = f"{BASE}/locker/"
+
+
 # ── 부모 페이지 (Referer 용) ─────────────────────────────────────────
 def record_parent(kind: str, *, lig_idx=None) -> str:
     return _u(f"/league/record/{kind}", lig_idx=lig_idx or config.LIG_IDX)

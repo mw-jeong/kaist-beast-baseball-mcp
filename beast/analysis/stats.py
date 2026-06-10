@@ -317,6 +317,59 @@ def common_opponents(team: str, vs: str = OUR_TEAM, season=None, jo=None) -> pd.
     return pd.DataFrame(rows)
 
 
+def career_tables(career: dict):
+    """crawl_player_career 결과 → (batting_df, pitching_df). 각 시즌행 + '통산' 합계행.
+    합계의 비율은 카운팅 합으로 재계산(타율=Σ안타/Σ타수 등). ERA는 사회인 7이닝 기준."""
+    seasons = career.get("seasons", [])
+    g = lambda d, k: (d.get(k) if isinstance(d.get(k), (int, float)) else 0) or 0
+
+    brows, bs = [], {k: 0 for k in ["경기수", "타석", "타수", "총안타", "루타", "홈런", "타점", "볼넷", "사구", "삼진", "득점", "도루"]}
+    for s in seasons:
+        b = s.get("batting") or {}
+        if not (b.get("경기수") or 0):
+            continue
+        PA = g(b, "타석")
+        brows.append({"시즌": s["season"], "경기": b.get("경기수"), "타율": b.get("타율"),
+                      "출루율": b.get("출루율"), "장타율": b.get("장타율"), "OPS": b.get("OPS"),
+                      "타석": PA, "안타": b.get("총안타"), "홈런": b.get("홈런"), "타점": b.get("타점"),
+                      "볼넷": b.get("볼넷"), "삼진": b.get("삼진"),
+                      "BB%": round(g(b, "볼넷") / PA * 100, 1) if PA else None,
+                      "K%": round(g(b, "삼진") / PA * 100, 1) if PA else None})
+        for k in bs:
+            bs[k] += g(b, k)
+    if brows:
+        AB, PA, H, TB = bs["타수"], bs["타석"], bs["총안타"], bs["루타"]
+        OB = H + bs["볼넷"] + bs["사구"]
+        obp = OB / PA if PA else 0
+        slg = TB / AB if AB else 0
+        brows.append({"시즌": "통산", "경기": bs["경기수"],
+                      "타율": round(H / AB, 3) if AB else None, "출루율": round(obp, 3),
+                      "장타율": round(slg, 3), "OPS": round(obp + slg, 3), "타석": PA, "안타": H,
+                      "홈런": bs["홈런"], "타점": bs["타점"], "볼넷": bs["볼넷"], "삼진": bs["삼진"],
+                      "BB%": round(bs["볼넷"] / PA * 100, 1) if PA else None,
+                      "K%": round(bs["삼진"] / PA * 100, 1) if PA else None})
+
+    prows, ps = [], {k: 0 for k in ["경기수", "타자", "피안타", "볼넷", "탈삼진", "실점", "자책점"]}
+    ip_total = 0.0
+    for s in seasons:
+        p = s.get("pitching") or {}
+        if not (p.get("경기수") or 0):
+            continue
+        prows.append({"시즌": s["season"], "경기": p.get("경기수"), "방어율": p.get("방어율"),
+                      "이닝": p.get("이닝"), "탈삼진": p.get("탈삼진"), "볼넷": p.get("볼넷"),
+                      "자책점": p.get("자책점"), "WHIP": p.get("WHIP")})
+        ip_total += innings_to_float(p.get("이닝"))
+        for k in ps:
+            ps[k] += g(p, k)
+    if prows:
+        prows.append({"시즌": "통산", "경기": ps["경기수"],
+                      "방어율": round(ps["자책점"] / ip_total * 7, 2) if ip_total else None,
+                      "이닝": round(ip_total, 2), "탈삼진": ps["탈삼진"], "볼넷": ps["볼넷"],
+                      "자책점": ps["자책점"],
+                      "WHIP": round((ps["피안타"] + ps["볼넷"]) / ip_total, 2) if ip_total else None})
+    return pd.DataFrame(brows), pd.DataFrame(prows)
+
+
 def team_aggregate(team: str, season=None, jo=None) -> dict:
     """팀 단위 타격 집계 + 득실 — '이 팀이 무엇으로 굴러가는지' 판단용."""
     b = batters(team, season=season, jo=jo)

@@ -278,6 +278,47 @@ def opponent_roster(team: str) -> str:
     return _safe(run)
 
 
+@mcp.tool()
+def player_gamelog(name: str, season: int = 0) -> str:
+    """선수의 **경기별 raw 기록 (사이언스리그 한정)** — 날짜/상대/구분 + 타석/타수/안타/득점/타점.
+    우리 리그 게임 단위 데이터(시즌 내 추세·컨디션·상대별 성적). season 미지정(0)=현재 시즌.
+    name=우리 팀 선수명. (라이브 수집)"""
+    def run():
+        from beast.crawler.crawl import crawl_player_gamelog
+        yr = season or config.CURRENT_SEASON
+        r = crawl_player_gamelog(_get_session(), name, season=yr)
+        if r.get("error"):
+            return f"{r['error']}. 우리 팀: {', '.join(r.get('available', []))[:300]}"
+        games = r["games"]
+        if not games:
+            return f"'{name}' {yr}시즌 사이언스리그 경기 기록이 없습니다."
+        df = pd.DataFrame(games)[["date", "상대", "구분", "타석", "타수", "안타", "득점", "타점"]]
+        return f"## {name} {yr} 사이언스리그 경기별 (raw)\n" + _md(df)
+    return _safe(run)
+
+
+@mcp.tool()
+def player_career(name: str, official: bool = True) -> str:
+    """선수의 시즌별 + 통산 기록(라커룸). ⚠️ **이 선수가 뛴 모든 리그·팀 합산 전체 커리어**
+    (사이언스리그 한정 아님 — 게임원이 리그 분리를 안 해줌). 선수의 전반적 수준·다년 추세 파악용.
+    우리 리그(사이언스리그) 단위 경기 기록은 player_gamelog를 쓸 것. name=우리 팀 선수명."""
+    def run():
+        from beast.crawler.crawl import crawl_player_career
+        career = crawl_player_career(_get_session(), name, official=official)
+        if career.get("error"):
+            return f"{career['error']}. 우리 팀 선수: {', '.join(career.get('available', []))[:300]}"
+        bdf, pdf = stats.career_tables(career)
+        if bdf.empty and pdf.empty:
+            return f"'{name}' 통산 기록이 없습니다(공식경기 기준)."
+        out = [f"## {name} 통산/시즌별 ({'공식' if official else '원외'})"]
+        if not bdf.empty:
+            out.append("### 타자\n" + _md(bdf))
+        if not pdf.empty:
+            out.append("### 투수 (ERA 7이닝 기준)\n" + _md(pdf))
+        return "\n\n".join(out)
+    return _safe(run)
+
+
 # ── 전력관리(write) ───────────────────────────────────────────────────
 @mcp.tool()
 def save_lineup(body: str, label: str = "", opponent: str = "", note: str = "") -> str:

@@ -60,6 +60,62 @@ def crawl_roster(session: GameOneSession, club_idx: int, *,
     return parse.parse_roster(html)
 
 
+def crawl_player_career(session: GameOneSession, name: str, *, club_idx: int | None = None,
+                        official: bool = True, stop_empty: int = 3,
+                        earliest: int = 2006) -> dict:
+    """선수의 시즌별 통산 기록 수집 (라커룸). 명단에서 locker 토큰을 찾아
+    현재 시즌부터 거슬러 올라가며 비어있는 시즌이 연속 stop_empty번 나올 때까지 수집."""
+    club_idx = club_idx or config.CLUB_IDX
+    session.ensure_login()
+    session.set_bujo(config.OUR_BUJO_IDX)
+    roster_html = session.get_html(
+        E.state_content("regist", group_code=config.OUR_GROUP_CODE, club_idx=club_idx),
+        referer=E.state_parent("regist"))
+    tokmap = parse.roster_locker_map(roster_html)
+    token = tokmap.get(name) or next((t for n, t in tokmap.items() if name in n), None)
+    if not token:
+        return {"name": name, "error": "명단에서 선수를 찾지 못함", "available": sorted(tokmap)}
+
+    gt = 2 if official else 4
+    seasons, empty = [], 0
+    for yr in range(config.CURRENT_SEASON, earliest - 1, -1):
+        rec = parse.parse_locker_career(session.get_html(
+            E.locker_career(token, season=yr, game_type=gt), referer=E.LOCKER_BASE))
+        games = (rec["batting"].get("경기수") or 0) + (rec["pitching"].get("경기수") or 0)
+        if games:
+            seasons.append({"season": yr, **rec})
+            empty = 0
+        elif seasons:
+            empty += 1
+            if empty >= stop_empty:
+                break
+    seasons.sort(key=lambda x: x["season"])
+    return {"name": name, "token": token, "official": official, "seasons": seasons}
+
+
+def crawl_player_gamelog(session: GameOneSession, name: str, *, season: int | None = None,
+                         club_idx: int | None = None, lig_idx: int | None = None,
+                         official: bool = True) -> dict:
+    """선수의 경기별 raw 기록 수집 (기본 사이언스리그=lig_idx 85 스코프)."""
+    season = season or config.CURRENT_SEASON
+    club_idx = club_idx or config.CLUB_IDX
+    lig_idx = lig_idx if lig_idx is not None else config.LIG_IDX
+    session.ensure_login()
+    session.set_bujo(config.OUR_BUJO_IDX)
+    roster_html = session.get_html(
+        E.state_content("regist", group_code=config.OUR_GROUP_CODE, club_idx=club_idx),
+        referer=E.state_parent("regist"))
+    tokmap = parse.roster_locker_map(roster_html)
+    token = tokmap.get(name) or next((t for n, t in tokmap.items() if name in n), None)
+    if not token:
+        return {"name": name, "error": "명단에서 선수를 찾지 못함", "available": sorted(tokmap)}
+    gt = 2 if official else 4
+    html = session.get_html(
+        E.locker_games(token, season=season, game_type=gt, lig_idx=lig_idx), referer=E.LOCKER_BASE)
+    return {"name": name, "season": season, "lig_idx": lig_idx,
+            "games": parse.parse_locker_games(html, season)}
+
+
 def collect_games(session: GameOneSession, *, season: int | None = None,
                   jo: str | None = None, max_pages: int = 15) -> list[dict]:
     """전체 일정(schedule/all)에서 우리 조의 '완료된' 경기 목록 — 전 페이지 순회.

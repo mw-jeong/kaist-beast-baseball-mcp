@@ -15,7 +15,7 @@
 ```
 게임원(로그인) ──크롤링──▶ 파싱 ──▶ SQLite 저장
                                       │
-                       MCP 서버(데이터·관리 도구 19개)
+                       MCP 서버(데이터·관리 도구 21개)
                                       │  stdio
                               Claude Desktop  ← 여기서 자연어로 분석 요청
 ```
@@ -93,7 +93,7 @@ GAMEONE_PASSWD=본인_비밀번호
 
 Claude가 아래 도구들을 알아서 호출합니다.
 
-### MCP 도구 (16개)
+### MCP 도구 (21개)
 | 분류 | 도구 | 설명 |
 |---|---|---|
 | 수집/상태 | `refresh_data` · `data_status` | 최신 데이터(기록+박스스코어) 재수집 / 신선도 확인 |
@@ -102,6 +102,7 @@ Claude가 아래 도구들을 알아서 호출합니다.
 | 보정 | `regressed_batting` | (필요시) 소표본 empirical Bayes shrinkage — `OPS_adj` 등 |
 | 요약 | `team_summary` · `league_leaders` | 팀 정체성 한 줄 / 조 리더보드(raw, min 타석) |
 | **게임 로그** | `game_log` · `recent_form` · `pitcher_usage` | **실제 타순·선발** / 최근 폼 / 투수 부하·로테이션 |
+| 선수 다년 | `player_gamelog` · `player_career` | 경기별 raw(사이언스리그 한정) / 시즌별+통산(⚠️전체 리그 합산) |
 | 상대 | `scout_report` · `head_to_head` · `common_opponents` | 종합(sections 선택) / 맞대결(없으면 공통상대 대체) / 스케줄 강도 |
 | 명단 | `our_roster` · `opponent_roster` | 우리/상대 등록 명단 |
 | 관리(write) | `save_lineup` · `list_lineups` | 짜낸 라인업 저장·재조회(휘발 방지) |

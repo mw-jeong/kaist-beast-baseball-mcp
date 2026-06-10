@@ -299,6 +299,73 @@ def parse_boxscore(html: str, game_idx: int | None = None) -> dict[str, Any]:
     return out
 
 
+# ── 선수 통산/시즌 기록 (라커룸) ──────────────────────────────────────
+def roster_locker_map(html: str) -> dict[str, str]:
+    """등록현황 HTML → {선수명: locker_token}. 통산기록 조회의 키."""
+    soup = BeautifulSoup(html, "lxml")
+    out: dict[str, str] = {}
+    for tr in soup.find_all("tr"):
+        a = tr.find("a", href=re.compile(r"/locker/\?group_code="))
+        if not a:
+            continue
+        cell = tr.find(["td", "th"])
+        name, _, _ = _split_name(cell.get_text(" ", strip=True)) if cell else ("", None, "")
+        tok = re.search(r"group_code=([^\"&]+)", a["href"])
+        if name and tok:
+            out.setdefault(name, tok.group(1))
+    return out
+
+
+_GAMELINE_RE = re.compile(r"(\d+)\s*타석\s*(\d+)\s*타수\s*(\d+)\s*안타\s*(\d+)\s*득점\s*(\d+)\s*타점")
+
+
+def parse_locker_games(html: str, season: int | None = None) -> list[dict]:
+    """라커룸 게임별기록 → 경기별 raw 행. <ul class=game_list><li>: 날짜 + 타석/타수/안타/
+    득점/타점 + 상대(span.team) + 구분(dd.type). lig_idx 필터로 리그 스코프 가능."""
+    soup = BeautifulSoup(html, "lxml")
+    out: list[dict] = []
+    for ul in soup.find_all("ul", class_=re.compile("game_list")):
+        for li in ul.find_all("li"):
+            txt = _clean(li.get_text(" "))
+            st = _GAMELINE_RE.search(txt)
+            if not st:
+                continue
+            dm = re.match(r"(\d{1,2})[.\-/](\d{1,2})", txt)
+            opp = li.find("span", class_="team")
+            typ = li.find("dd", class_="type")
+            out.append({
+                "season": season,
+                "date": f"{dm.group(1).zfill(2)}.{dm.group(2).zfill(2)}" if dm else None,
+                "상대": opp.get_text(strip=True) if opp else None,
+                "구분": typ.get_text(strip=True) if typ else None,
+                "타석": int(st.group(1)), "타수": int(st.group(2)), "안타": int(st.group(3)),
+                "득점": int(st.group(4)), "타점": int(st.group(5)),
+            })
+    return out
+
+
+def parse_locker_career(html: str) -> dict[str, dict]:
+    """라커룸 통합기록(sum) 페이지 → {batting:{지표:값}, pitching:{지표:값}}.
+
+    데이터는 <ul class="hitter_section"/"pitcher_section"> 안 <li><span>라벨</span>
+    <span>값</span></li> 구조(div 렌더라 테이블 아님). 경기수=0이면 빈 시즌.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    out: dict[str, dict] = {}
+    for cls, key in (("hitter_section", "batting"), ("pitcher_section", "pitching")):
+        cont = soup.find(class_=re.compile(cls))
+        rec: dict[str, Any] = {}
+        if cont:
+            for li in cont.find_all("li"):
+                spans = li.find_all("span")
+                if len(spans) == 2:                       # 라벨+값 쌍만 (능력치 li 제외)
+                    label = _clean(spans[0].get_text())
+                    if label:
+                        rec[label] = _num(_clean(spans[1].get_text()))
+        out[key] = rec
+    return out
+
+
 # ── 등록현황(명단) ────────────────────────────────────────────────────
 def parse_roster(html: str) -> list[dict[str, Any]]:
     """state/regist content → 선수 명단. 5개 표(포지션 그룹)를 병합."""
