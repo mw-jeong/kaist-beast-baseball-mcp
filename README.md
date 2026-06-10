@@ -42,24 +42,32 @@ cd kaist-beast-baseball-mcp
 Install uv if you don't have it: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
 Windows (PowerShell) `irm https://astral.sh/uv/install.ps1 | iex`
 
-> After installing uv, **open a new terminal** (or run the PATH line the installer prints) so the
-> `uv` command is found. `uv venv --python 3.12` will **download Python 3.12 automatically** if needed.
-> You don't activate the venv — the commands below call `.venv/...` directly.
+After installing uv, **open a new terminal** so the `uv` command is found. Then create the venv,
+**activate it**, and install. Once activated (prompt shows `(.venv)`), every command in this guide is
+just `python ...` — identical on macOS and Windows.
 
 macOS / Linux:
 ```bash
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -r requirements.txt
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 Windows (PowerShell):
 ```powershell
 uv venv --python 3.12 .venv
-uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+# If you see "running scripts is disabled", run this once in this window first:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+uv pip install -r requirements.txt
 ```
-<details><summary>Without uv (needs Python 3.10+ installed)</summary>
+`uv venv --python 3.12` downloads Python 3.12 automatically if needed. **Each new terminal = re-activate**
+(re-run the `source`/`Activate.ps1` line). If you'd rather not activate, prefix commands with the venv
+python instead: macOS `.venv/bin/python ...`, Windows `.venv\Scripts\python.exe ...`.
 
-macOS/Linux: `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`
-Windows: `py -3.12 -m venv .venv && .venv\Scripts\pip install -r requirements.txt`
+<details><summary>Without uv (Python 3.10+ already installed)</summary>
+
+- macOS/Linux: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
+- Windows: `py -3.12 -m venv .venv` then `.\.venv\Scripts\Activate.ps1` then `pip install -r requirements.txt`
 </details>
 
 ### 3) gameone account (`.env`)
@@ -74,8 +82,9 @@ GAMEONE_PASSWD=your_password
 `.env` is gitignored and never committed. Do not share it — each person uses their own account.
 
 ### 4) Verify login
+With the venv activated, run (same command on macOS and Windows):
 ```bash
-.venv/bin/python -m beast.cli login-test          # Windows: .venv\Scripts\python -m beast.cli login-test
+python -m beast.cli login-test
 ```
 You should see "✓ 로그인 성공". **If it fails, fix `.env` (id/password) before continuing** — the
 connect step won't work until login succeeds. Run all commands from the project folder.
@@ -84,9 +93,10 @@ connect step won't work until login succeeds. Run all commands from the project 
 
 ### Option A — Claude Desktop (local, simplest, recommended)
 ```bash
-.venv/bin/python -m beast.cli setup-desktop       # Windows: .venv\Scripts\python -m beast.cli setup-desktop
+python -m beast.cli setup-desktop
 ```
-This auto-registers the server in your Claude Desktop config (handles macOS and Windows paths).
+This auto-registers the server in your Claude Desktop config (handles macOS and Windows paths,
+using this venv's Python).
 Then **fully quit and reopen Claude Desktop** — on macOS closing the window isn't enough; use Cmd+Q
 (or right-click the dock icon > Quit). On Windows, quit from the system tray.
 
@@ -101,7 +111,7 @@ Most people should use Option A. Use this only if you specifically want the web 
 accepts **remote HTTP** MCP servers reachable from the public internet — a local stdio server cannot be
 added directly. You must keep this server running in HTTP mode on your machine and expose it via a tunnel:
 
-1. Run in HTTP mode (leave it running): `.venv/bin/python -m beast.mcp_server --http --port 8765`
+1. Run in HTTP mode (venv activated, leave it running): `python -m beast.mcp_server --http --port 8765`
    (serves `http://127.0.0.1:8765/mcp`)
 2. Install a tunnel tool and expose the port (in another terminal):
    - cloudflared — macOS `brew install cloudflared`, Windows `winget install Cloudflare.cloudflared`,
@@ -153,9 +163,10 @@ Per-game box scores enable real lineups, rotations, and recent form. See [docs/G
 for the full domain guide (also returned by the `guide` tool).
 
 ## CLI (optional)
+With the venv activated:
 ```bash
-.venv/bin/python -m beast.cli crawl --save                 # collect + store (records + box scores)
-.venv/bin/python -m beast.cli export --opponent "대전 리드오프"  # build a Markdown scouting report
+python -m beast.cli crawl --save                 # collect + store (records + box scores)
+python -m beast.cli export --opponent "대전 리드오프"  # build a Markdown scouting report
 ```
 
 ## Troubleshooting
@@ -164,7 +175,11 @@ for the full domain guide (also returned by the `guide` tool).
 - **`DH_KEY_TOO_SMALL` SSL error** -> gameone uses a weak DH key; a workaround adapter is included.
   Make sure your code is up to date (`git pull`).
 - **`mcp` install/version error** -> your Python is < 3.10. Recreate the venv with 3.12 (install step 2).
-- **Windows: command not found** -> use `.venv\Scripts\python` instead of `.venv/bin/python`.
+- **Windows PowerShell: "running scripts is disabled on this system"** (on `Activate.ps1`) ->
+  run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in that window, then activate again.
+- **`python` not found / wrong Python** -> the venv isn't activated. Re-run the activate line
+  (macOS `source .venv/bin/activate`, Windows `.\.venv\Scripts\Activate.ps1`), or prefix with the venv
+  python (`.venv/bin/python` / `.venv\Scripts\python.exe`).
 - **Login fails** -> check id/password and that the account is a Science League member.
 
 ## Project layout

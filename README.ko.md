@@ -42,24 +42,31 @@ cd kaist-beast-baseball-mcp
 uv 없으면 설치: macOS/Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` ·
 Windows(PowerShell) `irm https://astral.sh/uv/install.ps1 | iex`
 
-> uv 설치 후 **새 터미널을 열어야**(또는 설치 시 출력되는 PATH 줄 실행) `uv` 명령이 인식됩니다.
-> `uv venv --python 3.12` 는 필요하면 **Python 3.12를 자동으로 받아옵니다.** venv를 활성화할 필요 없이
-> 아래 명령들이 `.venv/...` 를 직접 호출합니다.
+uv 설치 후 **새 터미널을 여세요**(그래야 `uv` 명령 인식). 그다음 venv를 만들고 **활성화(activate)** 한 뒤
+설치합니다. 활성화되면(프롬프트에 `(.venv)` 표시) 이후 모든 명령은 그냥 `python ...` — macOS·Windows 동일.
 
 macOS / Linux:
 ```bash
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -r requirements.txt
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 Windows (PowerShell):
 ```powershell
 uv venv --python 3.12 .venv
-uv pip install --python .venv\Scripts\python.exe -r requirements.txt
+# "스크립트 실행이 사용 안 함" 오류가 나면, 이 창에서 한 번 실행:
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+uv pip install -r requirements.txt
 ```
-<details><summary>uv 없이 (Python 3.10+ 설치 필요)</summary>
+`uv venv --python 3.12` 는 필요하면 Python 3.12를 자동으로 받아옵니다. **새 터미널을 열 때마다 다시 활성화**
+(`source`/`Activate.ps1` 줄 재실행). 활성화가 싫으면 명령 앞에 venv 파이썬을 붙이세요:
+macOS `.venv/bin/python ...`, Windows `.venv\Scripts\python.exe ...`.
 
-macOS/Linux: `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`
-Windows: `py -3.12 -m venv .venv && .venv\Scripts\pip install -r requirements.txt`
+<details><summary>uv 없이 (Python 3.10+ 설치돼 있을 때)</summary>
+
+- macOS/Linux: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
+- Windows: `py -3.12 -m venv .venv` 다음 `.\.venv\Scripts\Activate.ps1` 다음 `pip install -r requirements.txt`
 </details>
 
 ### 3) 게임원 계정 (`.env`)
@@ -74,8 +81,9 @@ GAMEONE_PASSWD=본인_비밀번호
 `.env`는 깃에 올라가지 않습니다(gitignore). 공유 금지 — 각자 자기 계정.
 
 ### 4) 로그인 확인
+venv 활성화 상태에서 (macOS·Windows 동일):
 ```bash
-.venv/bin/python -m beast.cli login-test          # Windows: .venv\Scripts\python -m beast.cli login-test
+python -m beast.cli login-test
 ```
 "✓ 로그인 성공"이 떠야 합니다. **실패하면 `.env`(아이디/비번)부터 고치고 진행하세요** — 로그인이
 되기 전엔 연동 단계가 동작하지 않습니다. 모든 명령은 프로젝트 폴더 안에서 실행합니다.
@@ -84,9 +92,9 @@ GAMEONE_PASSWD=본인_비밀번호
 
 ### 방법 A — Claude Desktop (로컬, 가장 간단, 권장)
 ```bash
-.venv/bin/python -m beast.cli setup-desktop       # Windows: .venv\Scripts\python -m beast.cli setup-desktop
+python -m beast.cli setup-desktop
 ```
-이 명령이 본인 PC 경로에 맞게 Claude Desktop 설정에 서버를 자동 등록합니다(macOS/Windows 경로 자동).
+이 명령이 본인 PC 경로(이 venv의 파이썬)에 맞게 Claude Desktop 설정에 서버를 자동 등록합니다(macOS/Windows 자동).
 그 다음 **Claude Desktop을 완전히 종료 후 다시 실행**하세요 — macOS는 창만 닫으면 안 되고 Cmd+Q
 (또는 독 아이콘 우클릭 > 종료), Windows는 트레이에서 종료.
 
@@ -101,7 +109,7 @@ GAMEONE_PASSWD=본인_비밀번호
 접근 가능한 원격 HTTP** MCP 서버만 받습니다 — 로컬 stdio 서버는 직접 추가할 수 없습니다. 따라서 이
 서버를 HTTP 모드로 본인 PC에서 계속 실행하고 터널로 노출해야 합니다:
 
-1. HTTP 모드 실행(계속 켜둠): `.venv/bin/python -m beast.mcp_server --http --port 8765`
+1. HTTP 모드 실행(venv 활성화 상태로 계속 켜둠): `python -m beast.mcp_server --http --port 8765`
    (`http://127.0.0.1:8765/mcp` 제공)
 2. 터널 도구 설치 후 포트 노출(다른 터미널에서):
    - cloudflared — macOS `brew install cloudflared`, Windows `winget install Cloudflare.cloudflared`,
@@ -153,9 +161,10 @@ Claude가 아래 도구를 알아서 호출합니다. 팁: `guide`를 먼저 호
 [docs/GAMEONE.md](docs/GAMEONE.md) (또는 `guide` 도구) 참고.
 
 ## CLI (선택)
+venv 활성화 상태에서:
 ```bash
-.venv/bin/python -m beast.cli crawl --save                 # 수집+저장(기록+박스스코어)
-.venv/bin/python -m beast.cli export --opponent "대전 리드오프"  # 분석용 Markdown 리포트
+python -m beast.cli crawl --save                 # 수집+저장(기록+박스스코어)
+python -m beast.cli export --opponent "대전 리드오프"  # 분석용 Markdown 리포트
 ```
 
 ## 트러블슈팅
@@ -163,7 +172,11 @@ Claude가 아래 도구를 알아서 호출합니다. 팁: `guide`를 먼저 호
   Claude Desktop > Settings > Developer에서 상태 확인.
 - **`DH_KEY_TOO_SMALL` SSL 오류** -> 게임원의 약한 DH 키 때문. 우회 어댑터가 포함돼 있으니 최신 코드 확인(`git pull`).
 - **`mcp` 설치/버전 오류** -> Python이 3.10 미만. 3.12로 venv 재생성(설치 2단계).
-- **Windows에서 명령 인식 안 됨** -> `.venv/bin/python` 대신 `.venv\Scripts\python` 사용.
+- **Windows PowerShell "스크립트 실행이 사용 안 함"** (`Activate.ps1`에서) ->
+  그 창에서 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` 실행 후 다시 활성화.
+- **`python`을 못 찾음 / 다른 파이썬** -> venv가 활성화 안 됨. 활성화 줄을 다시 실행
+  (macOS `source .venv/bin/activate`, Windows `.\.venv\Scripts\Activate.ps1`)하거나, 명령 앞에
+  venv 파이썬을 붙이세요(`.venv/bin/python` / `.venv\Scripts\python.exe`).
 - **로그인 실패** -> 아이디/비번 확인, 그 계정이 사이언스리그 리그 회원인지 확인.
 
 ## 프로젝트 구조
